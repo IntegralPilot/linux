@@ -17,5 +17,3 @@
 	compatible = "apple,j433", "apple,t8122", "apple,arm-platform";
 	model = "Apple iMac (24-inch, 2x USB-C, M3, 2023)";
 };
-
-

@@ -38,6 +38,15 @@
 		device_type = "memory";
 		reg = <0x8 0 0x2 0>; /* To be filled by loader */
 	};
+
+	wlan_pwr: regulator-wlan-pwr {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&smc_gpio 13 GPIO_ACTIVE_HIGH>;
+		regulator-boot-on;
+		regulator-name = "wlan-pwr";
+		startup-delay-us = <100000>;
+	};
 };
 
 &serial0 {
@@ -204,7 +213,10 @@
  * (such as MAC addresses).
  */
 &port00 {
+	compatible = "pciclass,0604";
 	bus-range = <1 1>;
+	vpcie3v3-supply = <&wlan_pwr>;
+
 	wifi0: wifi@0,0 {
 		compatible = "pci14e4,4425";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;

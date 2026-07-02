@@ -51,6 +51,10 @@
 			<APPLE_PINMUX(80, 1)>;
 	};
 
+	pcie_ge_pins: pcie-ge-pins {
+		pinmux = <APPLE_PINMUX(8, 1)>;
+	};
+
 	spi1_pins: spi1-pins {
 		pinmux = <APPLE_PINMUX(155, 1)>, /* SDI */
 			<APPLE_PINMUX(156, 1)>,  /* SDO */

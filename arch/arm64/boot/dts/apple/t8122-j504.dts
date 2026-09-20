@@ -35,3 +35,10 @@
 	status = "okay";
 };
 
+&wifi0 {
+	brcm,board-type = "apple,tresco";
+};
+
+&bluetooth0 {
+	brcm,board-type = "apple,tresco";
+};

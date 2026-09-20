@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: GPL-2.0+ OR MIT
+/*
+ * PCIe-GE nodes present on both dies of T6022 (M2 Ultra).
+ *
+ * Copyright The Asahi Linux Contributors
+ */
+
+#define DIE
+#define DIE_NO 0
+
+&die0 {
+	#include "t602x-pcie-ge.dtsi"
+};
+
+#undef DIE
+#undef DIE_NO
+
+#define DIE _die1
+#define DIE_NO 1
+
+&die1 {
+	#include "t602x-pcie-ge.dtsi"
+};
+
+#undef DIE
+#undef DIE_NO

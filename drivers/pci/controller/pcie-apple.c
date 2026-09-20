@@ -30,6 +30,7 @@
 #include <linux/msi.h>
 #include <linux/of_irq.h>
 #include <linux/pci-ecam.h>
+#include <linux/pci-pwrctrl.h>
 
 #include "pci-host-common.h"
 
@@ -183,6 +184,7 @@ static const struct hw_info t602x_hw = {
 struct apple_pcie {
 	struct mutex		lock;
 	struct device		*dev;
+	struct pci_host_bridge	*bridge;
 	void __iomem            *base;
 	const struct hw_info	*hw;
 	unsigned long		*bitmap;
@@ -550,21 +552,35 @@ static u32 apple_pcie_rid2sid_write(struct apple_pcie_port *port,
 	return readl_relaxed(port_rid2sid_addr(port, idx));
 }
 
+static int apple_pcie_set_perst(struct apple_pcie *pcie,
+				struct pci_host_port *host_port, int value)
+{
+	struct pci_host_perst *perst;
+	int ret;
+
+	if (!host_port)
+		return 0;
+
+	list_for_each_entry(perst, &host_port->perst, list) {
+		ret = gpiod_direction_output(perst->desc, value);
+		if (ret)
+			return dev_err_probe(pcie->dev, ret,
+					     "Failed to set PERST#\n");
+	}
+
+	return 0;
+}
+
 static int apple_pcie_setup_port(struct apple_pcie *pcie,
-				 struct device_node *np)
+				 struct device_node *np,
+				 struct pci_host_port *host_port)
 {
 	struct platform_device *platform = to_platform_device(pcie->dev);
 	struct apple_pcie_port *port;
-	struct gpio_desc *reset;
 	struct resource *res;
 	char name[16];
 	u32 stat, idx;
 	int ret, i;
-
-	reset = devm_fwnode_gpiod_get(pcie->dev, of_fwnode_handle(np), "reset",
-				      GPIOD_OUT_LOW, "PERST#");
-	if (IS_ERR(reset))
-		return PTR_ERR(reset);
 
 	port = devm_kzalloc(pcie->dev, sizeof(*port), GFP_KERNEL);
 	if (!port)
@@ -604,7 +620,9 @@ static int apple_pcie_setup_port(struct apple_pcie *pcie,
 	rmw_set(PORT_APPCLK_EN, port->base + PORT_APPCLK);
 
 	/* Assert PERST# before setting up the clock */
-	gpiod_set_value_cansleep(reset, 1);
+	ret = apple_pcie_set_perst(pcie, host_port, 1);
+	if (ret)
+		return ret;
 
 	ret = apple_pcie_setup_refclk(pcie, port);
 	if (ret < 0)
@@ -615,7 +633,9 @@ static int apple_pcie_setup_port(struct apple_pcie *pcie,
 
 	/* Deassert PERST# */
 	rmw_set(PORT_PERST_OFF, port->base + pcie->hw->port_perst);
-	gpiod_set_value_cansleep(reset, 0);
+	ret = apple_pcie_set_perst(pcie, host_port, 0);
+	if (ret)
+		return ret;
 
 	/* Wait for 100ms after PERST# deassertion (PCIe r5.0, 6.6.1) */
 	msleep(100);
@@ -818,6 +838,7 @@ static void apple_pcie_disable_device(struct pci_host_bridge *bridge, struct pci
 static int apple_pcie_init(struct pci_config_window *cfg)
 {
 	struct device *dev = cfg->parent;
+	struct pci_host_port *host_port = NULL;
 	struct apple_pcie *pcie;
 	int ret;
 
@@ -825,11 +846,25 @@ static int apple_pcie_init(struct pci_config_window *cfg)
 	if (WARN_ON(!pcie))
 		return -ENOENT;
 
+	if (!list_empty(&pcie->bridge->ports))
+		host_port = list_first_entry(&pcie->bridge->ports,
+					     struct pci_host_port, list);
+
 	for_each_available_child_of_node_scoped(dev->of_node, of_port) {
-		ret = apple_pcie_setup_port(pcie, of_port);
+		if (!of_node_is_type(of_port, "pci"))
+			continue;
+
+		ret = apple_pcie_setup_port(pcie, of_port, host_port);
 		if (ret) {
 			dev_err(dev, "Port %pOF setup fail: %d\n", of_port, ret);
 			return ret;
+		}
+
+		if (host_port) {
+			if (list_is_last(&host_port->list, &pcie->bridge->ports))
+				host_port = NULL;
+			else
+				host_port = list_next_entry(host_port, list);
 		}
 	}
 
@@ -847,6 +882,14 @@ static const struct pci_ecam_ops apple_pcie_cfg_ecam_ops = {
 	}
 };
 
+static void apple_pcie_pwrctrl_cleanup(void *data)
+{
+	struct device *dev = data;
+
+	pci_pwrctrl_power_off_devices(dev);
+	pci_pwrctrl_destroy_devices(dev);
+}
+
 static int apple_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -860,6 +903,7 @@ static int apple_pcie_probe(struct platform_device *pdev)
 
 	pcie = pci_host_bridge_priv(bridge);
 	pcie->dev = dev;
+	pcie->bridge = bridge;
 	pcie->hw = of_device_get_match_data(dev);
 	if (!pcie->hw)
 		return -ENODEV;
@@ -871,6 +915,25 @@ static int apple_pcie_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&pcie->ports);
 
 	ret = apple_msi_init(pcie);
+	if (ret)
+		return ret;
+
+	ret = pci_host_common_parse_ports(dev, bridge);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to parse root ports\n");
+
+	ret = pci_pwrctrl_create_devices(dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to create pwrctrl devices\n");
+
+	ret = pci_pwrctrl_power_on_devices(dev);
+	if (ret) {
+		if (ret != -EPROBE_DEFER)
+			pci_pwrctrl_destroy_devices(dev);
+		return dev_err_probe(dev, ret, "failed to power on pwrctrl devices\n");
+	}
+
+	ret = devm_add_action_or_reset(dev, apple_pcie_pwrctrl_cleanup, dev);
 	if (ret)
 		return ret;
 

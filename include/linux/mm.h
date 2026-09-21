@@ -4288,7 +4288,7 @@ static inline unsigned long vma_pages(const struct vm_area_struct *vma)
 
 static inline unsigned long vma_last_pgoff(struct vm_area_struct *vma)
 {
-	return vma->vm_pgoff + vma_pages(vma) - 1;
+	return vma->vm_pgoff + vma_native_pages(vma) - 1;
 }
 
 static inline unsigned long vma_desc_size(const struct vm_area_desc *desc)

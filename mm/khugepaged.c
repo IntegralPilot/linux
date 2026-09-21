@@ -351,6 +351,9 @@ static bool pte_none_or_zero(pte_t pte)
 int hugepage_madvise(struct vm_area_struct *vma,
 		     vm_flags_t *vm_flags, int advice)
 {
+	if (vma_is_p3s_4k(vma))
+		return -EINVAL;
+
 	switch (advice) {
 	case MADV_HUGEPAGE:
 		*vm_flags &= ~VM_NOHUGEPAGE;
@@ -434,6 +437,9 @@ void __khugepaged_enter(struct mm_struct *mm)
 {
 	struct mm_slot *slot;
 	int wakeup;
+
+	if (mm_is_p3s_4k(mm))
+		return;
 
 	/* __khugepaged_exit() must not run from under us */
 	VM_BUG_ON_MM(collapse_test_exit(mm), mm);

@@ -58,6 +58,7 @@
 #include <trace/events/mmap.h>
 
 #include "internal.h"
+#include <linux/p3s_user_pages.h>
 
 #ifndef arch_mmap_check
 #define arch_mmap_check(addr, len, flags)	(0)
@@ -671,6 +672,8 @@ unsigned long vm_unmapped_area(struct vm_unmapped_area_info *info)
 {
 	unsigned long addr;
 
+	p3s_adjust_unmapped_area_info(info);
+
 	if (info->flags & VM_UNMAPPED_AREA_TOPDOWN)
 		addr = unmapped_area_topdown(info);
 	else
@@ -944,8 +947,9 @@ find_vma_prev(struct mm_struct *mm, unsigned long addr,
 	return vma;
 }
 
+#undef stack_guard_gap
 /* enforced gap between the expanding stack and other mappings. */
-unsigned long stack_guard_gap = 256UL<<PAGE_SHIFT;
+unsigned long stack_guard_gap = 256UL << PAGE_SHIFT_KERNEL;
 
 static int __init cmdline_parse_stack_guard_gap(char *p)
 {
@@ -954,7 +958,7 @@ static int __init cmdline_parse_stack_guard_gap(char *p)
 
 	val = simple_strtoul(p, &endptr, 10);
 	if (!*endptr)
-		stack_guard_gap = val << PAGE_SHIFT;
+		stack_guard_gap = val << PAGE_SHIFT_KERNEL;
 
 	return 1;
 }
@@ -1260,6 +1264,7 @@ EXPORT_SYMBOL(vm_brk_flags);
 /* Release all mmaps. */
 void exit_mmap(struct mm_struct *mm)
 {
+	P3S_CONTEXT_REMOTE_MM(mm);
 	struct mmu_gather tlb;
 	struct vm_area_struct *vma;
 	unsigned long nr_accounted = 0;

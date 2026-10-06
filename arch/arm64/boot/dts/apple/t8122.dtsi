@@ -874,15 +874,15 @@
 
 		nvme: nvme@30dcc0000 {
 			compatible = "apple,t8122-nvme-ans2", "apple,t8103-nvme-ans2";
-		 	reg = <0x3 0x0dcc0000 0x0 0x60000>,
-		 		<0x3 0x09400000 0x0 0x4000>;
-		 	reg-names = "nvme", "ans";
+			reg = <0x3 0x0dcc0000 0x0 0x60000>,
+				<0x3 0x09400000 0x0 0x4000>;
+			reg-names = "nvme", "ans";
 
-		 	interrupt-parent = <&aic>;
-		 	interrupts = <AIC_IRQ 742 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-parent = <&aic>;
+			interrupts = <AIC_IRQ 742 IRQ_TYPE_LEVEL_HIGH>;
 
-		 	mboxes = <&ans_mbox>;
-		 	apple,sart = <&sart>;
+			mboxes = <&ans_mbox>;
+			apple,sart = <&sart>;
 
 			power-domains = <&ps_ans>, <&ps_apcie_st>;
 			power-domain-names = "ans", "apcie0";

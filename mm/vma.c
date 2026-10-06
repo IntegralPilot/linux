@@ -61,6 +61,7 @@ struct mmap_state {
 		.end = (map_)->end,					\
 		.vm_flags = (map_)->vm_flags,				\
 		.pgoff = (map_)->pgoff,					\
+		.slice_off = (map_)->slice_off,				\
 		.file = (map_)->file,					\
 		.prev = (map_)->prev,					\
 		.middle = vma_,						\
@@ -1125,6 +1126,7 @@ static struct vm_area_struct *vma_merge_copied_range(struct vma_merge_struct *vm
 	VM_WARN_ON_VMG(!vmg->middle, vmg);
 
 	vmg->copied_from = vmg->middle;
+	vmg->slice_off = vma_slice_off(vmg->middle);
 	vmg->middle = NULL;
 	return vma_merge_new_range(vmg);
 }

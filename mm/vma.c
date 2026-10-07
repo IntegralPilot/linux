@@ -711,7 +711,7 @@ static void vmg_adjust_set_range(struct vma_merge_struct *vmg)
 		pgoff = linear_page_index(adjust, vmg->end);
 	} else if (vmg->__adjust_next_start) {
 		adjust = vmg->next;
-		pgoff = linear_page_index(adjust, vmg->end);
+		pgoff = linear_page_index(vmg->middle, vmg->end);
 	} else {
 		return;
 	}

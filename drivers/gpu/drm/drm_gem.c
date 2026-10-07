@@ -1223,10 +1223,14 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (drm_dev_is_unplugged(dev))
 		return -ENODEV;
 
+	if (vma_slice_off(vma))
+		return -EINVAL;
+
 	drm_vma_offset_lock_lookup(dev->vma_offset_manager);
 	node = drm_vma_offset_exact_lookup_locked(dev->vma_offset_manager,
 						  vma->vm_pgoff,
-						  vma_pages(vma));
+						  DIV_ROUND_UP(vma->vm_end - vma->vm_start,
+							       PAGE_SIZE));
 	if (likely(node)) {
 		obj = container_of(node, struct drm_gem_object, vma_node);
 		/*

@@ -1262,8 +1262,9 @@ static inline unsigned long vma_address_end(struct page_vma_mapped_walk *pvmw)
 	pgoff_t pgoff;
 	unsigned long address;
 
-	/* Common case, plus ->pgoff is invalid for KSM */
-	if (pvmw->nr_pages == 1)
+	/* P3S file pages can span several PTEs, ->pgoff is invalid for KSM. */
+	if (pvmw->nr_pages == 1 &&
+	    (!vma_is_p3s_4k(vma) || !vma->vm_file))
 		return pvmw->address + vma_page_size(vma);
 
 	pgoff = pvmw->pgoff + pvmw->nr_pages;

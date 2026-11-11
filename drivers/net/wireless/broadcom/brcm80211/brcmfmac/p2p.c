@@ -958,7 +958,7 @@ brcmf_p2p_discover_listen(struct brcmf_p2p_info *p2p, u16 channel, u32 duration)
 {
 	struct brcmf_pub *drvr = p2p->cfg->pub;
 	struct brcmf_cfg80211_vif *vif;
-	struct brcmu_chan ch;
+	struct brcmu_chan ch = {};
 	s32 err = 0;
 
 	vif = p2p->bss_idx[P2PAPI_BSSCFG_DEVICE].vif;
@@ -1092,7 +1092,7 @@ static s32 brcmf_p2p_act_frm_search(struct brcmf_p2p_info *p2p, u16 channel)
 	u32 channel_cnt;
 	u16 *default_chan_list;
 	u32 i;
-	struct brcmu_chan ch;
+	struct brcmu_chan ch = {};
 
 	brcmf_dbg(TRACE, "Enter\n");
 
@@ -2031,7 +2031,7 @@ static void brcmf_p2p_get_current_chanspec(struct brcmf_p2p_info *p2p,
 {
 	struct brcmf_if *ifp;
 	u8 mac_addr[ETH_ALEN];
-	struct brcmu_chan ch;
+	struct brcmu_chan ch = {};
 	struct brcmf_bss_info_le *bi;
 	u8 *buf;
 

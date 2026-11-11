@@ -326,6 +326,21 @@ static u8 nl80211_band_to_fwil(enum nl80211_band band)
 	return 0;
 }
 
+static u8 nl80211_band_to_chanspec_band(enum nl80211_band band)
+{
+	switch (band) {
+	case NL80211_BAND_2GHZ:
+		return BRCMU_CHAN_BAND_2G;
+	case NL80211_BAND_5GHZ:
+		return BRCMU_CHAN_BAND_5G;
+	case NL80211_BAND_6GHZ:
+		return BRCMU_CHAN_BAND_6G;
+	default:
+		WARN_ON_ONCE(1);
+		return BRCMU_CHAN_BAND_2G;
+	}
+}
+
 static u16 chandef_to_chanspec(struct brcmu_d11inf *d11inf,
 			       struct cfg80211_chan_def *ch)
 {
@@ -385,17 +400,7 @@ static u16 chandef_to_chanspec(struct brcmu_d11inf *d11inf,
 	default:
 		WARN_ON_ONCE(1);
 	}
-	switch (ch->chan->band) {
-	case NL80211_BAND_2GHZ:
-		ch_inf.band = BRCMU_CHAN_BAND_2G;
-		break;
-	case NL80211_BAND_5GHZ:
-		ch_inf.band = BRCMU_CHAN_BAND_5G;
-		break;
-	case NL80211_BAND_60GHZ:
-	default:
-		WARN_ON_ONCE(1);
-	}
+	ch_inf.band = nl80211_band_to_chanspec_band(ch->chan->band);
 	d11inf->encchspec(&ch_inf);
 
 	brcmf_dbg(TRACE, "chanspec: 0x%x\n", ch_inf.chspec);
@@ -409,6 +414,7 @@ u16 channel_to_chanspec(struct brcmu_d11inf *d11inf,
 
 	ch_inf.chnum = ieee80211_frequency_to_channel(ch->center_freq);
 	ch_inf.bw = BRCMU_CHAN_BW_20;
+	ch_inf.band = nl80211_band_to_chanspec_band(ch->band);
 	d11inf->encchspec(&ch_inf);
 
 	return ch_inf.chspec;

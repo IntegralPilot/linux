@@ -1375,4 +1375,7 @@ struct brcmf_eventmsgs_ext_le {
 	u8 mask[] __counted_by(len);
 };
 
+/* "he" iovar sub-command ids */
+#define BRCMF_HE_CMD_ENABLE	0
+
 #endif /* FWIL_TYPES_H_ */

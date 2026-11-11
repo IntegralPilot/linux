@@ -278,6 +278,9 @@ static int brcmf_pno_get_bucket_channels(struct cfg80211_sched_scan_request *r,
 	int i, err = 0;
 
 	for (i = 0; i < r->n_channels; i++) {
+		/* bare channel numbers cannot identify 6 GHz channels */
+		if (r->channels[i]->band == NL80211_BAND_6GHZ)
+			continue;
 		if (n_chan >= BRCMF_NUMCHANNELS) {
 			err = -ENOSPC;
 			goto done;

@@ -5,6 +5,7 @@
 #include <linux/netdevice.h>
 #include <linux/gcd.h>
 #include <net/cfg80211.h>
+#include <brcmu_wifi.h>
 
 #include "core.h"
 #include "debug.h"
@@ -13,7 +14,8 @@
 #include "cfg80211.h"
 #include "pno.h"
 
-#define BRCMF_PNO_VERSION		2
+#define BRCMF_PNO_VERSION_2		2
+#define BRCMF_PNO_VERSION_3		3
 #define BRCMF_PNO_REPEAT		4
 #define BRCMF_PNO_FREQ_EXPO_MAX		3
 #define BRCMF_PNO_IMMEDIATE_SCAN_BIT	3
@@ -30,6 +32,7 @@
 #define GSCAN_RETRY_THRESHOLD			3
 
 struct brcmf_pno_info {
+	u8 version;
 	int n_reqs;
 	struct cfg80211_sched_scan_request *reqs[BRCMF_PNO_MAX_BUCKETS];
 	struct mutex req_lock;
@@ -102,23 +105,16 @@ static int brcmf_pno_channel_config(struct brcmf_if *ifp,
 static int brcmf_pno_config(struct brcmf_if *ifp, u32 scan_freq,
 			    u32 mscan, u32 bestn)
 {
+	struct brcmf_pno_info *pi = ifp_to_pno(ifp);
 	struct brcmf_pub *drvr = ifp->drvr;
-	struct brcmf_pno_param_le pfn_param;
+	u8 pfn_mscan = 0;
+	u8 pfn_bestn = 0;
 	u16 flags;
 	u32 pfnmem;
 	s32 err;
 
-	memset(&pfn_param, 0, sizeof(pfn_param));
-	pfn_param.version = cpu_to_le32(BRCMF_PNO_VERSION);
-
-	/* set extra pno params */
 	flags = BIT(BRCMF_PNO_IMMEDIATE_SCAN_BIT) |
 		BIT(BRCMF_PNO_ENABLE_ADAPTSCAN_BIT);
-	pfn_param.repeat = BRCMF_PNO_REPEAT;
-	pfn_param.exp = BRCMF_PNO_FREQ_EXPO_MAX;
-
-	/* set up pno scan fr */
-	pfn_param.scan_freq = cpu_to_le32(scan_freq);
 
 	if (mscan) {
 		pfnmem = bestn;
@@ -136,15 +132,40 @@ static int brcmf_pno_config(struct brcmf_if *ifp, u32 scan_freq,
 			goto exit;
 		}
 		mscan = min_t(u32, mscan, pfnmem);
-		pfn_param.mscan = mscan;
-		pfn_param.bestn = bestn;
+		pfn_mscan = mscan;
+		pfn_bestn = bestn;
 		flags |= BIT(BRCMF_PNO_ENABLE_BD_SCAN_BIT);
 		brcmf_dbg(INFO, "mscan=%d, bestn=%d\n", mscan, bestn);
 	}
 
-	pfn_param.flags = cpu_to_le16(flags);
-	err = brcmf_fil_iovar_data_set(ifp, "pfn_set", &pfn_param,
-				       sizeof(pfn_param));
+	if (pi->version == BRCMF_PNO_VERSION_3) {
+		struct brcmf_pno_param_v3_le pfn_param = {
+			.version = cpu_to_le16(BRCMF_PNO_VERSION_3),
+			.length = cpu_to_le16(sizeof(pfn_param)),
+			.scan_freq = cpu_to_le32(scan_freq),
+			.flags = cpu_to_le16(flags),
+			.bestn = pfn_bestn,
+			.mscan = pfn_mscan,
+			.repeat = BRCMF_PNO_REPEAT,
+			.exp = BRCMF_PNO_FREQ_EXPO_MAX,
+		};
+
+		err = brcmf_fil_iovar_data_set(ifp, "pfn_set", &pfn_param,
+					       sizeof(pfn_param));
+	} else {
+		struct brcmf_pno_param_le pfn_param = {
+			.version = cpu_to_le32(BRCMF_PNO_VERSION_2),
+			.scan_freq = cpu_to_le32(scan_freq),
+			.flags = cpu_to_le16(flags),
+			.bestn = pfn_bestn,
+			.mscan = pfn_mscan,
+			.repeat = BRCMF_PNO_REPEAT,
+			.exp = BRCMF_PNO_FREQ_EXPO_MAX,
+		};
+
+		err = brcmf_fil_iovar_data_set(ifp, "pfn_set", &pfn_param,
+					       sizeof(pfn_param));
+	}
 	if (err)
 		bphy_err(drvr, "pfn_set failed, err=%d\n", err);
 
@@ -517,12 +538,19 @@ int brcmf_pno_stop_sched_scan(struct brcmf_if *ifp, u64 reqid)
 
 int brcmf_pno_attach(struct brcmf_cfg80211_info *cfg)
 {
+	struct brcmf_if *ifp = brcmf_get_ifp(cfg->pub, 0);
+	struct brcmf_pno_param_v3_le param = {};
 	struct brcmf_pno_info *pi;
 
 	brcmf_dbg(TRACE, "enter\n");
 	pi = kzalloc_obj(*pi);
 	if (!pi)
 		return -ENOMEM;
+
+	pi->version = BRCMF_PNO_VERSION_2;
+	if (!brcmf_fil_iovar_data_get(ifp, "pfn_set", &param, sizeof(param)) &&
+	    le16_to_cpu(param.version) == BRCMF_PNO_VERSION_3)
+		pi->version = BRCMF_PNO_VERSION_3;
 
 	cfg->pno = pi;
 	mutex_init(&pi->req_lock);
@@ -565,8 +593,86 @@ u64 brcmf_pno_find_reqid_by_bucket(struct brcmf_pno_info *pi, u32 bucket)
 	return reqid;
 }
 
+static bool brcmf_pno_get_layout(const struct brcmf_pno_scanresults_le *res,
+				 size_t *hdr_len, size_t *size)
+{
+	switch (le32_to_cpu(res->version)) {
+	case 3:
+		*hdr_len = sizeof(struct brcmf_pno_scanresults_v2_le);
+		*size = sizeof(struct brcmf_pno_net_info_v3_le);
+		return true;
+	case 2:
+		*hdr_len = sizeof(struct brcmf_pno_scanresults_v2_le);
+		*size = sizeof(struct brcmf_pno_net_info_le);
+		return false;
+	default:
+		WARN_ON_ONCE(1);
+		fallthrough;
+	case 1:
+		*hdr_len = sizeof(*res);
+		*size = sizeof(struct brcmf_pno_net_info_le);
+		return false;
+	}
+}
+
+int brcmf_pno_check_results(const void *data, u32 datalen, u32 count)
+{
+	const struct brcmf_pno_scanresults_le *res = data;
+	size_t hdr_len, size;
+
+	if (datalen < sizeof(*res))
+		return -EINVAL;
+
+	brcmf_pno_get_layout(res, &hdr_len, &size);
+	if (datalen < hdr_len || (datalen - hdr_len) / size < count)
+		return -EINVAL;
+
+	return 0;
+}
+
+int brcmf_pno_get_netinfo(struct brcmu_d11inf *d11inf, const void *data,
+			  u32 datalen, u32 idx, struct brcmf_pno_netinfo *ni)
+{
+	const struct brcmf_pno_scanresults_le *res = data;
+	const struct brcmf_pno_net_info_v3_le *v3;
+	const struct brcmf_pno_net_info_le *v1;
+	struct brcmu_chan ch = {};
+	size_t hdr_len, size;
+	bool is_v3;
+
+	memset(ni, 0, sizeof(*ni));
+
+	if (datalen < sizeof(*res))
+		return -EINVAL;
+
+	is_v3 = brcmf_pno_get_layout(res, &hdr_len, &size);
+	if (datalen < hdr_len || (datalen - hdr_len) / size <= idx)
+		return -EINVAL;
+
+	if (is_v3) {
+		v3 = data + hdr_len + idx * size;
+		ni->ssid_len = min_t(u8, v3->SSID_len, IEEE80211_MAX_SSID_LEN);
+		memcpy(ni->ssid, v3->SSID, ni->ssid_len);
+		memcpy(ni->bssid, v3->bssid, ETH_ALEN);
+		ch.chspec = le16_to_cpu(v3->chanspec);
+		d11inf->decchspec(&ch);
+		ni->channel = ch.control_ch_num;
+		ni->band = ch.band;
+	} else {
+		v1 = data + hdr_len + idx * size;
+		ni->ssid_len = min_t(u8, v1->SSID_len, IEEE80211_MAX_SSID_LEN);
+		memcpy(ni->ssid, v1->SSID, ni->ssid_len);
+		memcpy(ni->bssid, v1->bssid, ETH_ALEN);
+		ni->channel = v1->channel;
+		ni->band = v1->channel <= CH_MAX_2G_CHANNEL ?
+			   BRCMU_CHAN_BAND_2G : BRCMU_CHAN_BAND_5G;
+	}
+
+	return 0;
+}
+
 u32 brcmf_pno_get_bucket_map(struct brcmf_pno_info *pi,
-			     struct brcmf_pno_net_info_le *ni)
+			     const struct brcmf_pno_netinfo *ni)
 {
 	struct cfg80211_sched_scan_request *req;
 	struct cfg80211_match_set *ms;
@@ -581,8 +687,8 @@ u32 brcmf_pno_get_bucket_map(struct brcmf_pno_info *pi,
 			continue;
 		for (j = 0; j < req->n_match_sets; j++) {
 			ms = &req->match_sets[j];
-			if (ms->ssid.ssid_len == ni->SSID_len &&
-			    !memcmp(ms->ssid.ssid, ni->SSID, ni->SSID_len)) {
+			if (ms->ssid.ssid_len == ni->ssid_len &&
+			    !memcmp(ms->ssid.ssid, ni->ssid, ni->ssid_len)) {
 				bucket_map |= BIT(i);
 				break;
 			}

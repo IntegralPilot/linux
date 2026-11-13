@@ -12,6 +12,24 @@
 
 /* forward declaration */
 struct brcmf_pno_info;
+struct brcmu_d11inf;
+
+/**
+ * struct brcmf_pno_netinfo - network found by a PNO scan.
+ *
+ * @bssid: BSS network identifier.
+ * @ssid: ssid characters.
+ * @ssid_len: length of ssid.
+ * @channel: control channel number.
+ * @band: band of the channel, one of the BRCMU_CHAN_BAND_* values.
+ */
+struct brcmf_pno_netinfo {
+	u8 bssid[ETH_ALEN];
+	u8 ssid[IEEE80211_MAX_SSID_LEN];
+	u8 ssid_len;
+	u8 channel;
+	u8 band;
+};
 
 /**
  * brcmf_pno_start_sched_scan - initiate scheduled scan on device.
@@ -61,12 +79,33 @@ void brcmf_pno_detach(struct brcmf_cfg80211_info *cfg);
 u64 brcmf_pno_find_reqid_by_bucket(struct brcmf_pno_info *pi, u32 bucket);
 
 /**
+ * brcmf_pno_check_results - validate PNO scan results buffer length.
+ *
+ * @data: PNO scan results event data.
+ * @datalen: length of @data.
+ * @count: number of network entries reported in the results header.
+ */
+int brcmf_pno_check_results(const void *data, u32 datalen, u32 count);
+
+/**
+ * brcmf_pno_get_netinfo - extract a network from PNO scan results.
+ *
+ * @d11inf: chanspec conversion functions.
+ * @data: PNO scan results event data.
+ * @datalen: length of @data.
+ * @idx: index of the network in the results.
+ * @ni: network information to fill in.
+ */
+int brcmf_pno_get_netinfo(struct brcmu_d11inf *d11inf, const void *data,
+			  u32 datalen, u32 idx, struct brcmf_pno_netinfo *ni);
+
+/**
  * brcmf_pno_get_bucket_map - determine bucket map for given netinfo.
  *
  * @pi: pno instance used.
  * @netinfo: netinfo to compare with bucket configuration.
  */
 u32 brcmf_pno_get_bucket_map(struct brcmf_pno_info *pi,
-			     struct brcmf_pno_net_info_le *netinfo);
+			     const struct brcmf_pno_netinfo *netinfo);
 
 #endif /* _BRCMF_PNO_H */

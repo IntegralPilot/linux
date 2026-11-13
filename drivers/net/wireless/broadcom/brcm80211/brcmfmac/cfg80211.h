@@ -368,6 +368,7 @@ struct brcmf_cfg80211_wowl {
  * @vif_event: vif event signalling.
  * @wowl: wowl related information.
  * @pno: information of pno module.
+ * @he_iftype_data: per band HE capabilities registered with the wiphy.
  */
 struct brcmf_cfg80211_info {
 	struct wiphy *wiphy;
@@ -401,6 +402,7 @@ struct brcmf_cfg80211_info {
 	struct brcmf_cfg80211_wowl wowl;
 	struct brcmf_pno_info *pno;
 	u8 ac_priority[MAX_8021D_PRIO];
+	struct ieee80211_sband_iftype_data he_iftype_data[NUM_NL80211_BANDS];
 };
 
 /**

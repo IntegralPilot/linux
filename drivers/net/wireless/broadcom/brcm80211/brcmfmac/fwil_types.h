@@ -1108,6 +1108,46 @@ struct brcmf_pno_param_le {
 };
 
 /**
+ * struct brcmf_pno_param_v3_le - PNO scan configuration parameters
+ *
+ * @version: PNO parameters version.
+ * @length: size of this structure.
+ * @scan_freq: scan frequency.
+ * @lost_network_timeout: #sec. to declare discovered network as lost.
+ * @flags: Bit field to control features of PFN such as sort criteria auto
+ *	enable switch and background scan.
+ * @rssi_margin: Margin to avoid jitter for choosing a PFN based on RSSI sort
+ *	criteria.
+ * @bestn: number of best networks in each bucket.
+ * @mscan: number of scans recorded which is equal to or less than bestn.
+ * @repeat: minimum number of scan intervals before scan frequency changes
+ *	in adaptive scan.
+ * @exp: exponent of 2 for maximum scan interval.
+ * @slow_freq: slow scan period.
+ * @min_bound: minimum bound for PFN backoff.
+ * @max_bound: maximum bound for PFN backoff.
+ * @pfn_lp_scan_disable: disable low power scan interleaving.
+ * @pfn_lp_scan_cnt: number of low power scans before a high power scan.
+ */
+struct brcmf_pno_param_v3_le {
+	__le16 version;
+	__le16 length;
+	__le32 scan_freq;
+	__le32 lost_network_timeout;
+	__le16 flags;
+	__le16 rssi_margin;
+	u8 bestn;
+	u8 mscan;
+	u8 repeat;
+	u8 exp;
+	__le32 slow_freq;
+	u8 min_bound;
+	u8 max_bound;
+	u8 pfn_lp_scan_disable;
+	u8 pfn_lp_scan_cnt;
+};
+
+/**
  * struct brcmf_pno_config_le - PNO channel configuration.
  *
  * @reporttype: determines what is reported.
@@ -1158,6 +1198,31 @@ struct brcmf_pno_net_info_le {
 	u8 SSID[32];
 	__le16	RSSI;
 	__le16	timestamp;
+};
+
+/**
+ * struct brcmf_pno_net_info_v3_le - information per found network.
+ *
+ * @bssid: BSS network identifier.
+ * @chanspec: channel spec.
+ * @SSID_len: length of ssid.
+ * @pad: padding.
+ * @flags: flags.
+ * @SSID: ssid characters.
+ * @RSSI: receive signal strength (in dBm).
+ * @timestamp: age in seconds.
+ *
+ * Version 3 results use the header of &struct brcmf_pno_scanresults_v2_le.
+ */
+struct brcmf_pno_net_info_v3_le {
+	u8 bssid[ETH_ALEN];
+	__le16 chanspec;
+	u8 SSID_len;
+	u8 pad;
+	__le16 flags;
+	u8 SSID[32];
+	__le16 RSSI;
+	__le16 timestamp;
 };
 
 /**
@@ -1374,5 +1439,8 @@ struct brcmf_eventmsgs_ext_le {
 	u8 maxgetsize;
 	u8 mask[] __counted_by(len);
 };
+
+/* "he" iovar sub-command ids */
+#define BRCMF_HE_CMD_ENABLE	0
 
 #endif /* FWIL_TYPES_H_ */
